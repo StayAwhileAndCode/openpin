@@ -1,0 +1,40 @@
+# Local user data, device keys, and recordings — NEVER commit!
+config/
+recordings/
+*.token
+*.key
+*.secret
+
+# Bluetooth captures & phone bugreports
+*.btsnoop
+*.log
+*.pklg
+*.cfa
+*.pcap
+*.pcapng
+bugreport*.zip
+*.zip
+
+# Audio files
+*.wav
+*.asr
+*.opus
+*.mp3
+*.m4a
+*.ogg
+
+# Python virtual environments & caches
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# OS / Editor files
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/

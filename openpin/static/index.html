@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>OpenPin — Local Offline Audio Sync</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <div class="container">
+    <header class="topbar">
+      <div class="brand">
+        <div class="logo-dot">OP</div>
+        <div>
+          <h1>OpenPin</h1>
+          <p data-i18n="subtitle">Seu gravador, seus áudios — 100% local, offline e sem nuvem</p>
+        </div>
+      </div>
+      <div class="topbar-actions">
+        <div class="lang-switch">
+          <button type="button" class="lang-btn" id="lang-pt" onclick="setLang('pt')">PT-BR</button>
+          <button type="button" class="lang-btn" id="lang-en" onclick="setLang('en')">EN</button>
+        </div>
+        <button type="button" class="secondary small" onclick="resetConfig()" data-i18n="btn_reset">Trocar aparelho</button>
+      </div>
+    </header>
+
+    <div id="global-msg" class="alert" hidden></div>
+
+    <!-- STEP 1: FIND DEVICE -->
+    <section class="card">
+      <div class="step-header">
+        <div class="step-title">
+          <span class="step-num" id="step1-num">1</span>
+          <h2 data-i18n="step1_title">Encontrar seu Plaud no Bluetooth</h2>
+        </div>
+        <span class="badge" id="step1-badge" data-i18n="badge_pending">Pendente</span>
+      </div>
+      <p class="hint" data-i18n="step1_hint">
+        Acorde o gravador (aperte o botão rapidamente) e desligue o Bluetooth do celular por um instante para ele aparecer livre aqui.
+      </p>
+
+      <div id="saved-device-box" class="device-item selected" hidden>
+        <div>
+          <strong id="saved-dev-name"></strong>
+          <div class="hint" style="margin:2px 0 0;font-size:0.82rem">
+            <span id="saved-dev-model"></span> · <code id="saved-dev-mac"></code>
+          </div>
+        </div>
+        <span class="badge ok" data-i18n="badge_selected">Conectável</span>
+      </div>
+
+      <div class="row" style="margin-top:12px">
+        <button type="button" id="btn-scan" onclick="scanBluetooth()" data-i18n="btn_scan">Procurar no Bluetooth</button>
+        <label style="font-size:0.85rem;color:var(--muted);display:flex;align-items:center;gap:6px;cursor:pointer">
+          <input type="checkbox" id="chk-scan-all">
+          <span data-i18n="chk_scan_all">Mostrar todos os dispositivos Bluetooth próximos</span>
+        </label>
+      </div>
+      <div id="scan-results" class="device-list"></div>
+    </section>
+
+    <!-- STEP 2: DEVICE KEY -->
+    <section class="card">
+      <div class="step-header">
+        <div class="step-title">
+          <span class="step-num" id="step2-num">2</span>
+          <h2 data-i18n="step2_title">Configurar a chave do seu aparelho (só 1 vez)</h2>
+        </div>
+        <span class="badge" id="step2-badge" data-i18n="badge_pending">Pendente</span>
+      </div>
+      <p class="hint" data-i18n="step2_hint">
+        Cada gravador tem uma chave fixa criada quando você vinculou ele ao app do celular. Depois de salvá-la aqui uma vez, ela vale para sempre.
+      </p>
+
+      <div id="key-saved-banner" class="alert ok" hidden>
+        <span data-i18n="key_saved_prefix">Chave configurada neste computador (impressão SHA-256:</span>
+        <code id="key-fp"></code>).
+        <button type="button" class="secondary small" style="margin-left:10px" onclick="verifyKey()" data-i18n="btn_verify_key">Testar conexão Bluetooth</button>
+      </div>
+
+      <div class="tabs">
+        <button type="button" class="tab-btn active" id="tab-log-btn" onclick="switchKeyTab('log')" data-i18n="tab_log">Extrair do log do celular (Fácil)</button>
+        <button type="button" class="tab-btn" id="tab-paste-btn" onclick="switchKeyTab('paste')" data-i18n="tab_paste">Colar chave manualmente</button>
+      </div>
+
+      <div id="tab-log">
+        <ol class="steps-mini">
+          <li data-i18n="log_step_1">No Android, abra <b>Opções do Desenvolvedor</b> e ative <b>Log de snoop HCI Bluetooth</b>.</li>
+          <li data-i18n="log_step_2">Abra o app oficial com o gravador ligado por 5 segundos até ele conectar, depois feche o app.</li>
+          <li data-i18n="log_step_3">Em <b>Opções do Desenvolvedor → Relatório de bugs</b>, gere o arquivo <code>.zip</code> e envie para o PC.</li>
+          <li data-i18n="log_step_4">Arraste o <code>.zip</code> (ou <code>btsnoop_hci.log</code> / <code>.pklg</code>) abaixo — tudo é lido na memória RAM e descartado na hora!</li>
+        </ol>
+        <div class="dropzone" id="log-dropzone" onclick="document.getElementById('log-file-input').click()">
+          <input type="file" id="log-file-input" accept=".zip,.log,.cfa,.pklg,.pcap,.pcapng" hidden onchange="uploadLogFile(this.files[0])">
+          <strong data-i18n="drop_log_title">Clique ou arraste aqui o arquivo .zip / btsnoop_hci.log</strong>
+          <div class="hint" style="margin:6px 0 0;font-size:0.82rem" data-i18n="drop_log_sub">Nenhum dado do celular fica salvo no disco — apenas os 16/32 caracteres da chave do gravador.</div>
+        </div>
+      </div>
+
+      <div id="tab-paste" hidden>
+        <div class="row">
+          <input type="password" id="token-input" placeholder="Ex.: 16 ou 32 caracteres hexadecimais (0-9, a-f)" autocomplete="off">
+          <button type="button" onclick="savePastedToken()" data-i18n="btn_save_token">Salvar e verificar</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- STEP 3: SYNC & AUDIO LIBRARY -->
+    <section class="card">
+      <div class="step-header">
+        <div class="step-title">
+          <span class="step-num" id="step3-num">3</span>
+          <h2 data-i18n="step3_title">Sincronizar e Ouvir Gravações (100% Offline)</h2>
+        </div>
+        <button type="button" class="secondary small" onclick="openFolder()" data-i18n="btn_open_folder">Abrir pasta de áudios</button>
+      </div>
+
+      <div class="stats-grid">
+        <div class="stat-box">
+          <div class="stat-label" data-i18n="stat_battery">Bateria</div>
+          <div class="stat-value" id="stat-battery">—</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-label" data-i18n="stat_storage">Espaço livre</div>
+          <div class="stat-value" id="stat-storage">—</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-label" data-i18n="stat_clock">Relógio interno</div>
+          <div class="stat-value" id="stat-clock">—</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-label" data-i18n="stat_wifi">Hotspot Wi-Fi</div>
+          <div class="stat-value" id="stat-wifi">—</div>
+        </div>
+      </div>
+
+      <!-- Wi-Fi Hotspot Credentials Helper (only shown when needed or toggled) -->
+      <div id="wifi-setup-box" class="alert warn" hidden>
+        <strong data-i18n="wifi_setup_title">Configurar Wi-Fi rápido do NotePin (só na 1ª vez)</strong>
+        <p style="margin:6px 0 10px;font-size:0.86rem" data-i18n="wifi_setup_desc">
+          Seu gravador abriu o hotspot Wi-Fi, mas não enviou o nome/senha automaticamente pelo Bluetooth. Escolha a rede dele abaixo e digite o <b>Número de Série</b> (que é a senha de fábrica do Wi-Fi do aparelho, impressa na caixa ou em "Sobre o dispositivo" no app):
+        </p>
+        <div id="wifi-candidates" class="row" style="margin-bottom:8px"></div>
+        <div class="row">
+          <input type="text" id="wifi-ssid-input" placeholder="Nome do Wi-Fi do gravador (SSID)">
+          <input type="password" id="wifi-pass-input" placeholder="Senha Wi-Fi (= Número de Série do aparelho)" autocomplete="off">
+          <button type="button" onclick="saveWifiCreds()" data-i18n="btn_save_wifi">Salvar Wi-Fi</button>
+        </div>
+      </div>
+
+      <!-- Live Progress Box -->
+      <div id="sync-progress-box" class="progress-box" hidden>
+        <div class="row" style="justify-content:space-between">
+          <strong id="sync-phase-label">Conectando...</strong>
+          <span id="sync-bytes-label" style="font-size:0.84rem;color:var(--muted)"></span>
+        </div>
+        <div class="progress-bar-bg">
+          <div class="progress-bar-fill" id="sync-bar-fill"></div>
+        </div>
+      </div>
+
+      <div class="row" style="margin-bottom:10px">
+        <button type="button" id="btn-wifi-sync" onclick="startWifiSync('all_new')" data-i18n="btn_sync_wifi">Baixar novas por Wi-Fi Rápido</button>
+        <button type="button" class="secondary" id="btn-wifi-list" onclick="startWifiSync('list')" data-i18n="btn_list_wifi">Ver lista no gravador (Wi-Fi)</button>
+        <button type="button" class="secondary" id="btn-ble-list" onclick="startBleSync([])" data-i18n="btn_list_ble">Modo só Bluetooth</button>
+        <button type="button" class="secondary small" onclick="toggleWifiSetup()" data-i18n="btn_cfg_wifi">Configurar Wi-Fi manual</button>
+      </div>
+      <p class="hint" style="font-size:0.82rem" data-i18n="firewall_tip">
+        Dica no Windows: na 1ª sincronização por Wi-Fi, se aparecer a janela do Firewall do Windows, marque <b>Redes privadas e públicas</b> e clique em <b>Permitir</b>. Seu Wi-Fi de casa volta sozinho logo em seguida!
+      </p>
+
+      <!-- Recordings currently on the device -->
+      <div id="device-recs-section" hidden style="margin-top:18px">
+        <div class="row" style="justify-content:space-between">
+          <h3 style="margin:0;font-size:1rem" data-i18n="dev_recs_title">Gravações encontradas no aparelho</h3>
+          <button type="button" class="danger small" onclick="deleteSelectedFromPin()" data-i18n="btn_delete_pin">Apagar do gravador as já salvas marcadas</button>
+        </div>
+        <table class="rec-table">
+          <thead>
+            <tr>
+              <th style="width:32px"></th>
+              <th data-i18n="th_id">ID / Data</th>
+              <th data-i18n="th_duration">Duração</th>
+              <th data-i18n="th_status">Status</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="device-recs-body"></tbody>
+        </table>
+      </div>
+
+      <!-- Local clean WAV library -->
+      <div style="margin-top:24px">
+        <h3 style="margin:0 0 8px;font-size:1rem" data-i18n="local_recs_title">Meus Áudios Salvos neste Computador (.wav limpos)</h3>
+        <div id="local-recs-empty" class="hint" data-i18n="local_recs_empty">Nenhuma gravação baixada ainda.</div>
+        <table class="rec-table" id="local-recs-table" hidden>
+          <thead>
+            <tr>
+              <th data-i18n="th_file">Arquivo / Início</th>
+              <th data-i18n="th_duration">Duração</th>
+              <th data-i18n="th_listen">Ouvir</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="local-recs-body"></tbody>
+        </table>
+      </div>
+
+      <!-- Standalone .asr / .wav converter -->
+      <details style="margin-top:20px">
+        <summary style="cursor:pointer;color:var(--muted);font-size:0.88rem" data-i18n="converter_summary">
+          Tem um arquivo .asr / .opus / .wav avulso (ex.: copiado via cabo USB)? Converter e limpar aqui
+        </summary>
+        <div class="dropzone" style="margin-top:10px;padding:16px" onclick="document.getElementById('asr-file-input').click()">
+          <input type="file" id="asr-file-input" accept=".asr,.opus,.wav" hidden onchange="convertStandaloneFile(this.files[0])">
+          <span data-i18n="converter_drop">Clique ou solte um arquivo .asr ou .wav para gerar um .wav limpo (sem serial embutido)</span>
+        </div>
+      </details>
+    </section>
+
+    <footer class="footer-note" data-i18n="footer">
+      OpenPin roda 100% em 127.0.0.1 no seu computador. Nenhum áudio, chave ou identificador sai da sua máquina.
+    </footer>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
